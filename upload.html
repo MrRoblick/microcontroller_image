@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RGB565 Converter — загрузка</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:#f7fafc; color:#111827; padding:24px; }
+    .container { max-width:900px; margin:20px auto; background:#fff; border-radius:12px; box-shadow:0 6px 18px rgba(2,6,23,0.08); padding:20px; }
+    h1 { font-size:20px; margin:0 0 12px; }
+    form { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start }
+    .col { flex:1 1 220px; min-width:220px }
+    label { display:block; font-size:13px; margin-bottom:6px; color:#374151 }
+    input[type="text"], input[type="number"], select { width:100%; padding:8px 10px; border-radius:8px; border:1px solid #e5e7eb; box-sizing:border-box }
+    input[type="file"] { padding:6px }
+    button { background:#111827; color:#fff; border:0; padding:10px 14px; border-radius:10px; cursor:pointer }
+    .actions { display:flex; gap:8px; align-items:center }
+    .small { font-size:13px; color:#6b7280 }
+    pre { background:#0f172a; color:#e6eef8; padding:10px; border-radius:8px; overflow:auto }
+    .result { margin-top:16px }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>RGB565 Converter — загрузка (fixed 240×135)</h1>
+    <p class="small">Этот сервер ЖЕСТКО конвертирует любое присланное изображение в RGB565 размером <strong>240×135</strong> и пересылает бинарный дамп (240×135×2 = 64800 байт) на локальный хост (по умолчанию <code>http://127.0.0.1:8080/update-image</code>). С клиента файл не скачивается.</p>
+
+    <form id="uploadForm" action="/convert" method="post" enctype="multipart/form-data">
+      <div class="col">
+        <label for="image">Файл изображения</label>
+        <input id="image" name="image" type="file" accept="image/*">
+      </div>
+
+      <div class="col">
+        <label for="imageUrl">Или указать imageUrl (сервер скачает)</label>
+        <input id="imageUrl" name="imageUrl" type="text" placeholder="https://example.com/pic.png">
+      </div>
+
+      <div style="flex-basis:100%; height:0"></div>
+
+      <div style="width:160px">
+        <label for="endian">Endian</label>
+        <select id="endian" name="endian">
+          <option value="little" selected>little</option>
+          <option value="big">big</option>
+        </select>
+      </div>
+
+      <div style="width:160px">
+        <label for="bg">Фон (R,G,B)</label>
+        <input id="bg" name="bg" type="text" value="0,0,0">
+      </div>
+
+      <div style="width:320px">
+        <label for="target">Куда пересылать (локальный хост)</label>
+        <input id="target" name="target" type="text" value="http://127.0.0.1:8080/update-image">
+        <div class="small">По умолчанию вы можете оставить это поле: сервер отправит туда бинарный RGB565 240×135.</div>
+      </div>
+
+      <div class="actions" style="flex-basis:100%; margin-top:6px">
+        <button id="submitFile" type="submit">Отправить</button>
+        <div style="margin-left:8px" class="small">Сервер выполнит конвертацию и пересылку. На клиенте будет отображён статус.</div>
+      </div>
+    </form>
+
+    <div class="result" id="result"></div>
+
+    <hr style="margin:18px 0">
+    <h2 style="font-size:16px">Примечания</h2>
+    <ul>
+      <li class="small">Размеры жёстко установлены в 240×135 — поля "Ширина" и "Высота" были удалены.</li>
+      <li class="small">Сервер отправляет бинарную пачку 64800 байт с заголовком <code>Content-Type: application/octet-stream</code> и заголовками <code>X-Width</code>, <code>X-Height</code>, <code>X-Endian</code>.</li>
+      <li class="small">Если ESP32 в вашей сети находится на другом IP — укажите его в поле "Куда пересылать" (например <code>http://192.168.1.42:8080/update-image</code>).</li>
+    </ul>
+  </div>
+
+  <script>
+    document.getElementById('uploadForm').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const form = ev.target;
+      const fd = new FormData(form);
+
+      // Если нет файла, но есть imageUrl, добавим поле imageUrl
+      const fileInput = document.getElementById('image');
+      if (!fileInput.files.length && document.getElementById('imageUrl').value.trim()) {
+        fd.append('imageUrl', document.getElementById('imageUrl').value.trim());
+      }
+
+      // Переносим целевой URL в заголовок запроса (сервер прочитает и пересылает туда)
+      const target = document.getElementById('target').value.trim();
+      const endian = document.getElementById('endian').value;
+      const bg = document.getElementById('bg').value;
+
+      const resEl = document.getElementById('result');
+      resEl.textContent = 'Отправка...';
+
+      try {
+        const r = await fetch(form.action, {
+          method: 'POST',
+          headers: { 'X-Forward-To': target, 'X-Endian': endian, 'X-BG': bg },
+          body: fd
+        });
+
+        const txt = await r.text();
+        if (!r.ok) {
+          resEl.textContent = 'Ошибка: ' + r.status + ' — ' + txt;
+          return;
+        }
+
+        resEl.textContent = 'ОК — ' + txt;
+      } catch (err) {
+        resEl.textContent = 'Ошибка: ' + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
